@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="fi" class="h-full bg-slate-50">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NordicBank AI - Asiakaspalveluassistentin Testipenkki (RAG)</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        bank: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#0284c7',
+                            600: '#0369a1',
+                            700: '#075985',
+                            800: '#0c4a6e',
+                            900: '#082f49',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for clean UI */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        .message-appear {
+            animation: fadeIn 0.25s ease-out forwards;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(6px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans text-slate-800 antialiased selection:bg-bank-500 selection:text-white">
+
+    <!-- Top Navigation Bar -->
+    <header class="bg-bank-900 text-white shadow-md z-10 shrink-0">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-bank-500 to-bank-700 flex items-center justify-center shadow-inner">
+                    <i class="fa-solid fa-building-columns text-lg text-white"></i>
+                </div>
+                <div>
+                    <div class="flex items-center space-x-2">
+                        <h1 class="font-bold text-lg tracking-tight">NordicBank AI</h1>
+                        <span class="bg-bank-700 text-bank-100 text-xs px-2.5 py-0.5 rounded-full font-medium border border-bank-600">RAG Sandbox v1.0</span>
+                    </div>
+                    <p class="text-xs text-slate-300 hidden sm:block">Suomalaisen pankin asiakaspalveluassistentin kehitys- ja testausympäristö</p>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-3">
+                <!-- Mode Indicator -->
+                <div id="modeBadge" class="hidden md:flex items-center space-x-2 bg-slate-800/80 border border-slate-700 px-3 py-1.5 rounded-lg text-xs">
+                    <span id="modeDot" class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                    <span id="modeText" class="text-slate-200 font-medium">Simulaatiotila (Ilman API-avainta)</span>
+                </div>
+
+                <!-- Prompt Export Button -->
+                <button onclick="openPromptModal()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition flex items-center space-x-2" title="Näytä ja kopioi koko koottu kehote">
+                    <i class="fa-solid fa-code text-bank-500"></i>
+                    <span class="hidden sm:inline">Koottu Prompt</span>
+                </button>
+
+                <!-- API Settings Button -->
+                <button onclick="openApiModal()" class="bg-bank-600 hover:bg-bank-500 text-white px-3 py-2 rounded-lg text-xs sm:text-sm font-medium transition shadow-sm flex items-center space-x-2">
+                    <i class="fa-solid fa-key"></i>
+                    <span>API-asetukset</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 grid grid-cols-1 lg:grid-cols-12 gap-6 overflow-hidden">
+        
+        <!-- Left Column: Configuration & RAG Context (5 cols on desktop) -->
+        <section class="lg:col-span-5 flex flex-col space-y-4 overflow-y-auto pr-1">
+            
+            <!-- Quick Test Scenarios Card -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                        <i class="fa-solid fa-flask text-bank-600"></i>
+                        Pikaskenaariot (Testaa sääntöjä)
+                    </h2>
+                    <span class="text-[11px] text-slate-400">Klikkaa täyttääksesi</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="loadScenario('typos')" class="text-left p-2.5 rounded-lg border border-slate-200 hover:border-bank-500 hover:bg-bank-50/50 transition group">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-700 group-hover:text-bank-700">1. Kirjoitusvirheet</span>
+                            <i class="fa-solid fa-spell-check text-slate-400 group-hover:text-bank-500 text-xs"></i>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5 truncate">"paljonko maksa kortin uusiminen..."</p>
+                    </button>
+
+                    <button onclick="loadScenario('missing')" class="text-left p-2.5 rounded-lg border border-slate-200 hover:border-bank-500 hover:bg-bank-50/50 transition group">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-700 group-hover:text-bank-700">2. Puuttuva tieto</span>
+                            <i class="fa-solid fa-circle-question text-slate-400 group-hover:text-bank-500 text-xs"></i>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5 truncate">Kysymys kryptovaluutoista (Ei kontekstissa)</p>
+                    </button>
+
+                    <button onclick="loadScenario('loan')" class="text-left p-2.5 rounded-lg border border-slate-200 hover:border-red-400 hover:bg-red-50/40 transition group">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-700 group-hover:text-red-700">3. Lainapäätös</span>
+                            <i class="fa-solid fa-triangle-exclamation text-amber-500 text-xs"></i>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5 truncate">Pyytää suoraa lainapäätöstä (Eskalointi)</p>
+                    </button>
+
+                    <button onclick="loadScenario('angry')" class="text-left p-2.5 rounded-lg border border-slate-200 hover:border-red-400 hover:bg-red-50/40 transition group">
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-semibold text-slate-700 group-hover:text-red-700">4. Reklamaatio</span>
+                            <i class="fa-solid fa-fire text-red-500 text-xs"></i>
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5 truncate">Turhautunut asiakas reklamoi (Eskalointi)</p>
+                    </button>
+                </div>
+            </div>
+
+            <!-- RAG Database Context Editor -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex-1 flex flex-col min-h-[240px]">
+                <div class="flex items-center justify-between mb-2">
+                    <label for="ragContext" class="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                        <i class="fa-solid fa-database text-emerald-600"></i>
+                        KONTEKSTI (Haettu tietokannasta / RAG)
+                    </label>
+                    <button onclick="resetContext()" class="text-xs text-bank-600 hover:text-bank-800 font-medium">
+                        Palauta oletus
+                    </button>
+                </div>
+                <p class="text-xs text-slate-500 mb-2">Assistentti saa käyttää vastauksissaan <strong>ainoastaan</strong> tässä kentässä olevaa tietoa.</p>
+                <textarea id="ragContext" class="w-full flex-1 p-3 text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-bank-500 focus:bg-white transition resize-none leading-relaxed text-slate-700"></textarea>
+            </div>
+
+            <!-- System Rules Accordion / Box -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+                <div class="flex items-center justify-between cursor-pointer" onclick="toggleRules()">
+                    <span class="text-xs font-bold uppercase tracking-wider text-slate-600 flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved text-bank-600"></i>
+                        Järjestelmäkehote & Säännöt (System Prompt)
+                    </span>
+                    <button class="text-slate-400 hover:text-slate-600 text-xs flex items-center gap-1">
+                        <span id="rulesToggleText">Näytä/Muokkaa</span>
+                        <i id="rulesChevron" class="fa-solid fa-chevron-down transition-transform"></i>
+                    </button>
+                </div>
+                <div id="rulesContainer" class="hidden mt-3 pt-3 border-t border-slate-100">
+                    <textarea id="systemRules" rows="10" class="w-full p-3 text-xs font-mono bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-bank-500 focus:bg-white transition leading-relaxed text-slate-700"></textarea>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Right Column: Chat Interface (7 cols on desktop) -->
+        <section class="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden h-[600px] lg:h-auto">
+            
+            <!-- Chat Header -->
+            <div class="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between shrink-0">
+                <div class="flex items-center space-x-3">
+                    <div class="relative">
+                        <div class="w-9 h-9 rounded-full bg-bank-100 text-bank-700 flex items-center justify-center font-bold text-sm border border-bank-200">
+                            <i class="fa-solid fa-robot"></i>
+                        </div>
+                        <span class="absolute bottom-0 right-0 w-2.5 h-2.5 bg-emerald-500 border-2 border-white rounded-full"></span>
+                    </div>
+                    <div>
+                        <h3 class="text-sm font-semibold text-slate-800">NordicBank Asiakaspalveluassistentti</h3>
+                        <p class="text-xs text-slate-500">Vastaa vain virallisen RAG-tietokannan pohjalta</p>
+                    </div>
+                </div>
+                <button onclick="clearChat()" class="text-xs text-slate-500 hover:text-slate-800 px-2.5 py-1.5 rounded-lg hover:bg-slate-200/60 transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-rotate-right"></i>
+                    <span>Tyhjennä keskustelu</span>
+                </button>
+            </div>
+
+            <!-- Escalation Alert Banner (Hidden by default) -->
+            <div id="escalationBanner" class="hidden bg-red-600 text-white px-5 py-3 flex items-center justify-between shadow-inner shrink-0">
+                <div class="flex items-center space-x-3">
+                    <i class="fa-solid fa-headset text-xl animate-bounce"></i>
+                    <div>
+                        <p class="text-xs font-bold uppercase tracking-wider">Toiminto aktivoitu: [ESKALOI_IHMISASIANTUNTIJALLE]</p>
+                        <p class="text-xs text-red-100">Tekoäly keskeytti generoinnin sääntöjen mukaisesti ja siirsi keskustelun ihmisasiantuntijan jonoon.</p>
+                    </div>
+                </div>
+                <button onclick="resetEscalation()" class="bg-white/20 hover:bg-white/30 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition shrink-0">
+                    Kuittaa
+                </button>
+            </div>
+
+            <!-- Chat Messages Container -->
+            <div id="chatMessages" class="flex-1 p-5 overflow-y-auto space-y-4 bg-slate-50/40">
+                <!-- Initial Welcome Message -->
+                <div class="flex items-start space-x-3 message-appear">
+                    <div class="w-8 h-8 rounded-full bg-bank-600 text-white flex items-center justify-center shrink-0 text-xs mt-0.5 shadow-sm">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm max-w-[85%]">
+                        <p class="text-sm text-slate-700 leading-relaxed">
+                            Hei! Olen pankin digitaalinen asiakaspalveluassistentti. Kuinka voin auttaa sinua tänään päivittäisissä pankkiasioissa tai rahoitukseen liittyvissä kysymyksissä?
+                        </p>
+                        <div class="mt-2 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400">
+                            <span>Sääntöpohjainen RAG-assistentti</span>
+                            <span>Valmiina</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chat Input Area -->
+            <div class="p-4 bg-white border-t border-slate-200 shrink-0">
+                <form id="chatForm" onsubmit="handleSendMessage(event)" class="flex flex-col space-y-2">
+                    <div class="relative flex items-center">
+                        <textarea 
+                            id="userInput" 
+                            rows="2"
+                            placeholder="Kirjoita asiakkaan viesti tähän (voit kokeilla kirjoitusvirheitä tai vasemman reunan pikaskenaarioita)..." 
+                            class="w-full pl-4 pr-28 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-bank-500 focus:bg-white transition resize-none"
+                            onkeydown="if(event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); handleSendMessage(event); }"
+                        ></textarea>
+                        <button 
+                            type="submit" 
+                            id="sendBtn"
+                            class="absolute right-2.5 bottom-2.5 bg-bank-600 hover:bg-bank-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition shadow-sm flex items-center space-x-1.5 disabled:opacity-50"
+                        >
+                            <span>Lähetä</span>
+                            <i class="fa-solid fa-paper-plane text-xs"></i>
+                        </button>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                        <span>Paina <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-600">Enter</kbd> lähettääksesi</span>
+                        <span>Eskalointitunniste: <code class="text-bank-700 font-semibold">[ESKALOI_IHMISASIANTUNTIJALLE]</code></span>
+                    </div>
+                </form>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Modal: API Settings -->
+    <div id="apiModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-md w-full p-6 space-y-4">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-key text-bank-600"></i>
+                    Tekoälymallin API-asetukset
+                </h3>
+                <button onclick="closeApiModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-600 leading-relaxed">
+                Tämä HTML-pohja toimii suoraan selaimessa. Jos jätät API-avaimen tyhjäksi, sovellus käyttää sisäänrakennettua <strong>Simulaatiotilaa</strong>, joka demonstroi pankin sääntöjä paikallisesti. Syöttämällä Google Gemini API -avaimen voit testata kehotetta oikealla kielimallilla.
+            </p>
+            <div>
+                <label class="block text-xs font-semibold text-slate-700 mb-1">Google Gemini API Key (Valinnainen)</label>
+                <input 
+                    type="password" 
+                    id="apiKeyInput" 
+                    placeholder="AIzaSy..." 
+                    class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-bank-500"
+                >
+                <p class="text-[11px] text-slate-400 mt-1">Avain tallennetaan vain selaimesi väliaikaiseen muistiin (sessionStorage), eikä sitä lähetetä muualle kuin Googlen viralliseen rajapintaan.</p>
+            </div>
+            <div class="flex justify-end space-x-2 pt-2">
+                <button onclick="clearApiKey()" class="px-3 py-2 text-xs font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition">
+                    Käytä simulaatiotilaa
+                </button>
+                <button onclick="saveApiKey()" class="px-4 py-2 text-xs font-medium bg-bank-600 hover:bg-bank-700 text-white rounded-lg transition shadow-sm">
+                    Tallenna asetukset
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Full Prompt Inspector -->
+    <div id="promptModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-xl border border-slate-200 max-w-2xl w-full p-6 space-y-4 flex flex-col max-h-[85vh]">
+            <div class="flex items-center justify-between">
+                <h3 class="text-base font-bold text-slate-800 flex items-center gap-2">
+                    <i class="fa-solid fa-code text-bank-600"></i>
+                    Valmis RAG-kehote (Prompt Template)
+                </h3>
+                <button onclick="closePromptModal()" class="text-slate-400 hover:text-slate-600">
+                    <i class="fa-solid fa-xmark text-lg"></i>
+                </button>
+            </div>
+            <p class="text-xs text-slate-500">
+                Tämä on täydellinen koottu kehote, joka lähetetään kielimallille (sisältää säännöt, nykyisen RAG-kontekstin ja viimeisimmän asiakasviestin).
+            </p>
+            <pre id="compiledPromptPreview" class="flex-1 p-4 bg-slate-900 text-slate-100 rounded-xl text-xs font-mono overflow-y-auto whitespace-pre-wrap leading-relaxed"></pre>
+            <div class="flex justify-between items-center pt-2">
+                <span id="copyConfirm" class="text-xs text-emerald-600 font-medium opacity-0 transition">Kopioitu leikepöydälle!</span>
+                <div class="flex space-x-2">
+                    <button onclick="copyCompiledPrompt()" class="px-4 py-2 text-xs font-medium bg-bank-600 hover:bg-bank-700 text-white rounded-lg transition flex items-center gap-1.5">
+                        <i class="fa-regular fa-copy"></i>
+                        <span>Kopioi kehote</span>
+                    </button>
+                    <button onclick="closePromptModal()" class="px-4 py-2 text-xs font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition">
+                        Sulje
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script>
+        // 1. Default System Prompt & Rules (From User Specification)
+        const DEFAULT_SYSTEM_RULES = `Olet suomalaisen pankin asiakaspalveluassistentti. Tehtäväsi on auttaa asiakkaita rahoitukseen ja pankkipalveluihin liittyvissä kysymyksissä.
+
+SÄÄNNÖT:
+1. Ymmärrä asiakkaan tarkoitus: Asiakkaan viesteissä voi olla kirjoitusvirheitä tai epäselvyyksiä. Tunnista asiakkaan varsinainen tarkoitus, mutta älä koskaan arvaa puuttuvia faktoja.
+2. Tietolähde: Perusta vastauksesi AINOASTAAN sinulle toimitettuun pankin viralliseen tietokantaan (Context). Jos vastausta ei löydy kontekstista, ilmoita siitä asiakkaalle ja siirrä keskustelu ihmiselle.
+3. Ei hallusinaatioita: Älä koskaan keksi hintoja, korkoja, marginaaleja tai sopimusehtoja.
+4. Eskalointi: Jos asiakas pyytää lainapäätöstä, reklamoi tai on selvästi turhautunut, lopeta generointi ja käytä funktiota [ESKALOI_IHMISASIANTUNTIJALLE].
+5. Sävynhallinta: Vastaa aina ammattimaisesti, ytimekkäästi ja ymmärrettävästi.`;
+
+        // 2. Default RAG Database Context (Realistic Finnish Bank Pricing & Terms)
+        const DEFAULT_RAG_CONTEXT = `PANKIN VIRALLINEN HINNASTO JA PALVELUEHDOT (Voimassa 1.1.2026 alkaen):
+
+1. PÄIVITTÄISPALVELUT JA KORTIT:
+- Peruspankkipaketti (sis. käyttelytilin, verkkopankkitunnukset ja yhden Nordic Debit -kortin): 4,90 € / kk.
+- Alle 26-vuotiaille nuorisoasiakkaille Peruspankkipaketti: 0,00 € / kk.
+- Kadonneen tai rikkoutuneen kortin uusiminen: 10,00 € / kpl.
+- Kortin pikatoimitus (2-3 arkipäivää): 25,00 €.
+- PIN-koodin tarkistaminen mobiilipankissa: 0,00 € (paperisena postitse 5,00 €).
+- Kortin sulkupalvelu (24/7): 0100 1234 (pvm/mpm).
+
+2. TILISIIRROT JA MAKSAMINEN:
+- SEPA-tilisiirto verkkopankissa ja mobiilipankissa: 0,00 €.
+- SEPA-pikasiirto: 0,00 € (enimmäismäärä 100 000 €).
+- Laskun maksu konttorin kassalla: 8,00 € / lasku.
+
+3. ASUNTOLAINAT JA RAHOITUS (YLEISET EHDOT):
+- Asuntolainan toimitusmaksu (avauspalkkio): 350,00 €.
+- Lainanhoitokulut (suoraveloitus): 2,50 € / veloitus.
+- Lyhennysvapaan hakeminen verkkopankissa: 100,00 € / muutos.
+- Viitekorot: 12 kk Euribor, 6 kk Euribor tai 3 kk Euribor.
+- Asiakasosakas-etu: Omistaja-asiakkaille asuntolainan toimitusmaksu 0,00 € (norm. 350 €).
+- HUOM: Asiakaskohtainen lainamarginaali ja lopullinen lainapäätös määritellään aina henkilökohtaisessa luottokelpoisuusarvioinnissa rahoitusasiantuntijan toimesta.`;
+
+        // 3. Pre-built Test Scenarios
+        const SCENARIOS = {
+            typos: "moi!! mun pankkikortti meni poikki pesukoneesa, paljonko maksa kortin uusiminen ja saako sen nopeesti?? entä maksaako pin koodin katsominen apissa?",
+            missing: "Hei, haluaisin ostaa pankkinne kautta Bitcoinia ja Ethereumia suoraan osakesäästötililleni. Mikä on teidän välityspalkkio kryptovaluutoissa?",
+            loan: "Terve! Olen ostamassa 240 000 euron rivitaloasuntoa Oulusta. Tuloni ovat 4200 €/kk. Voitko antaa minulle heti sitovan lainapäätöksen ja kertoa tarkan marginaalini?",
+            angry: "Tämä teidän palvelunne on ihan täyttä roskaa!! Olen yrittänyt reklamoida virheellisestä palvelumaksusta jo viikon eikä kukaan vastaa! Vaadin hyvityksen välittömästi!!"
+        };
+
+        // Initialize UI on load
+        window.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('systemRules').value = DEFAULT_SYSTEM_RULES;
+            document.getElementById('ragContext').value = DEFAULT_RAG_CONTEXT;
+            updateModeIndicator();
+        });
+
+        function resetContext() {
+            document.getElementById('ragContext').value = DEFAULT_RAG_CONTEXT;
+        }
+
+        function toggleRules() {
+            const container = document.getElementById('rulesContainer');
+            const chevron = document.getElementById('rulesChevron');
+            container.classList.toggle('hidden');
+            chevron.classList.toggle('rotate-180');
+        }
+
+        function loadScenario(key) {
+            const input = document.getElementById('userInput');
+            input.value = SCENARIOS[key] || '';
+            input.focus();
+        }
+
+        function clearChat() {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.innerHTML = `
+                <div class="flex items-start space-x-3 message-appear">
+                    <div class="w-8 h-8 rounded-full bg-bank-600 text-white flex items-center justify-center shrink-0 text-xs mt-0.5 shadow-sm">
+                        <i class="fa-solid fa-robot"></i>
+                    </div>
+                    <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm max-w-[85%]">
+                        <p class="text-sm text-slate-700 leading-relaxed">
+                            Keskustelu on tyhjennetty. Kuinka voin auttaa sinua pankkipalveluihin liittyvissä kysymyksissä?
+                        </p>
+                    </div>
+                </div>
+            `;
+            resetEscalation();
+        }
+
+        function triggerEscalationUI() {
+            document.getElementById('escalationBanner').classList.remove('hidden');
+        }
+
+        function resetEscalation() {
+            document.getElementById('escalationBanner').classList.add('hidden');
+        }
+
+        // Build the complete prompt according to user's template
+        function buildFullPrompt(userMessage) {
+            const rules = document.getElementById('systemRules').value.trim();
+            const context = document.getElementById('ragContext').value.trim();
+            return `${rules}\n\nKONTEKSTI (Haettu tietokannasta):\n${context}\n\nASIAKKAAN VIESTI:\n${userMessage}`;
+        }
+
+        // Handle Sending a Message
+        async function handleSendMessage(e) {
+            e.preventDefault();
+            const inputEl = document.getElementById('userInput');
+            const message = inputEl.value.trim();
+            if (!message) return;
+
+            inputEl.value = '';
+            appendUserMessage(message);
+
+            const sendBtn = document.getElementById('sendBtn');
+            sendBtn.disabled = true;
+            const loadingId = appendLoadingIndicator();
+
+            try {
+                const apiKey = sessionStorage.getItem('GEMINI_API_KEY');
+                let responseText = '';
+
+                if (apiKey) {
+                    responseText = await callGeminiAPI(apiKey, buildFullPrompt(message));
+                } else {
+                    // Simulate realistic delay for local rule engine
+                    await new Promise(r => setTimeout(r, 700));
+                    responseText = runLocalRuleSimulation(message);
+                }
+
+                removeLoadingIndicator(loadingId);
+                appendBotMessage(responseText);
+
+                if (responseText.includes('[ESKALOI_IHMISASIANTUNTIJALLE]')) {
+                    triggerEscalationUI();
+                }
+            } catch (error) {
+                removeLoadingIndicator(loadingId);
+                appendBotMessage(`Virhe yhteydessä: ${error.message}. Tarkista API-avain tai vaihda simulaatiotilaan.`);
+            } finally {
+                sendBtn.disabled = false;
+            }
+        }
+
+        // Local Rule-Based Simulation (Works out-of-the-box on GitHub Pages without API key)
+        function runLocalRuleSimulation(msg) {
+            const lower = msg.toLowerCase();
+            const context = document.getElementById('ragContext').value.toLowerCase();
+
+            // Rule 4 check: Escalation on loan decision, complaint, or clear frustration
+            const escalationKeywords = [
+                'lainapäätö', 'lainapäätös', 'reklamoi', 'reklamaatio', 
+                'roskaa', 'paskaa', 'vaadin hyvity', 'vittu', 'helvetti', 
+                'ihan täyttä', 'pettynyt', 'valitus', 'sitovan lainan', 'tarkan marginaalin'
+            ];
+
+            if (escalationKeywords.some(kw => lower.includes(kw))) {
+                return `[ESKALOI_IHMISASIANTUNTIJALLE]`;
+            }
+
+            // Scenario 1 / Card & PIN questions
+            if (lower.includes('kortti') || lower.includes('kortin') || lower.includes('pin')) {
+                let parts = [];
+                if (context.includes('10,00 €')) {
+                    parts.push("Kadonneen tai rikkoutuneen kortin uusiminen maksaa hinnastomme mukaisesti **10,00 € / kpl**.");
+                }
+                if ((lower.includes('nopee') || lower.includes('pika')) && context.includes('25,00 €')) {
+                    parts.push("Jos tarvitset kortin nopeasti, kortin pikatoimitus (2–3 arkipäivää) maksaa **25,00 €**.");
+                }
+                if (lower.includes('pin') && context.includes('0,00 €')) {
+                    parts.push("PIN-koodin tarkistaminen mobiilipankissa on **maksutonta (0,00 €)** (paperisena postitse tilattuna 5,00 €).");
+                }
+                if (parts.length > 0) {
+                    return parts.join(" ") + "\n\nVoit tilata uuden kortin suoraan mobiili- tai verkkopankistamme.";
+                }
+            }
+
+            // Housing loan general fees (not asking for a personal decision)
+            if (lower.includes('asuntolaina') || lower.includes('lyhennysvapaa') || lower.includes('toimitusmaksu')) {
+                if (context.includes('350,00 €')) {
+                    return "Hinnastomme mukaan asuntolainan toimitusmaksu (avauspalkkio) on **350,00 €** (omistaja-asiakkaille 0,00 €) ja lainanhoitokulut suoraveloituksena **2,50 € / veloitus**. Lyhennysvapaan hakeminen verkkopankissa maksaa **100,00 € / muutos**.\n\nHuomioithan, että asiakaskohtainen lainamarginaali määritellään aina henkilökohtaisessa luottokelpoisuusarvioinnissa.";
+                }
+            }
+
+            // Daily banking package
+            if (lower.includes('päivittäis') || lower.includes('paketti') || lower.includes('kuukausimaksu') || lower.includes('nuoriso')) {
+                if (context.includes('4,90 €')) {
+                    return "Peruspankkipakettimme (sisältää käyttelytilin, verkkopankkitunnukset ja yhden Nordic Debit -kortin) maksaa **4,90 € / kk**. Alle 26-vuotiaille nuorisoasiakkaille paketti on maksuton (**0,00 € / kk**).";
+                }
+            }
+
+            // Rule 2 & 3: If information is not in the context, state it clearly and transfer to a human
+            return "Valitettavasti minulla käytössäni olevasta pankin tietokannasta ei löydy tietoa tähän kysymykseen. En voi arvailla tietoja tai ehtoja, joten siirrän keskustelun asiantuntijallemme, joka auttaa sinua mielellään eteenpäin.\n\n[ESKALOI_IHMISASIANTUNTIJALLE]";
+        }
+
+        // Live Gemini API Call
+        async function callGeminiAPI(apiKey, fullPrompt) {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: fullPrompt }] }],
+                    generationConfig: {
+                        temperature: 0.1, // Low temperature to strictly prevent hallucinations
+                        maxOutputTokens: 500
+                    }
+                })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json().catch(() => ({}));
+                throw new Error(errData.error?.message || `HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Ei vastausta mallilta.';
+        }
+
+        // UI Helpers for Chat Messages
+        function appendUserMessage(text) {
+            const container = document.getElementById('chatMessages');
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex items-start justify-end space-x-3 message-appear';
+            wrapper.innerHTML = `
+                <div class="bg-bank-600 text-white rounded-2xl rounded-tr-none px-4 py-3 shadow-sm max-w-[85%]">
+                    <p class="text-sm leading-relaxed whitespace-pre-wrap">${escapeHtml(text)}</p>
+                </div>
+                <div class="w-8 h-8 rounded-full bg-slate-200 text-slate-600 flex items-center justify-center shrink-0 text-xs mt-0.5">
+                    <i class="fa-solid fa-user"></i>
+                </div>
+            `;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendBotMessage(text) {
+            const container = document.getElementById('chatMessages');
+            const isEscalated = text.includes('[ESKALOI_IHMISASIANTUNTIJALLE]');
+            
+            // Format bold markdown and escalation badge nicely
+            let formattedHtml = escapeHtml(text)
+                .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold text-slate-900">$1</strong>')
+                .replace(
+                    /\[ESKALOI_IHMISASIANTUNTIJALLE\]/g, 
+                    `<span class="inline-flex items-center gap-1.5 bg-red-100 text-red-800 border border-red-300 px-2.5 py-1 rounded-md text-xs font-mono font-bold mt-1"><i class="fa-solid fa-bolt"></i> [ESKALOI_IHMISASIANTUNTIJALLE]</span>`
+                );
+
+            const wrapper = document.createElement('div');
+            wrapper.className = 'flex items-start space-x-3 message-appear';
+            wrapper.innerHTML = `
+                <div class="w-8 h-8 rounded-full ${isEscalated ? 'bg-red-600' : 'bg-bank-600'} text-white flex items-center justify-center shrink-0 text-xs mt-0.5 shadow-sm">
+                    <i class="fa-solid ${isEscalated ? 'fa-headset' : 'fa-robot'}"></i>
+                </div>
+                <div class="bg-white border ${isEscalated ? 'border-red-300 ring-2 ring-red-100' : 'border-slate-200'} rounded-2xl rounded-tl-none px-4 py-3 shadow-sm max-w-[85%]">
+                    <div class="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">${formattedHtml}</div>
+                </div>
+            `;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendLoadingIndicator() {
+            const container = document.getElementById('chatMessages');
+            const id = 'loader-' + Date.now();
+            const wrapper = document.createElement('div');
+            wrapper.id = id;
+            wrapper.className = 'flex items-start space-x-3 message-appear';
+            wrapper.innerHTML = `
+                <div class="w-8 h-8 rounded-full bg-bank-600 text-white flex items-center justify-center shrink-0 text-xs mt-0.5">
+                    <i class="fa-solid fa-robot"></i>
+                </div>
+                <div class="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 shadow-sm flex items-center space-x-1.5">
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 0.15s"></span>
+                    <span class="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style="animation-delay: 0.3s"></span>
+                </div>
+            `;
+            container.appendChild(wrapper);
+            container.scrollTop = container.scrollHeight;
+            return id;
+        }
+
+        function removeLoadingIndicator(id) {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/[&<>'"]/g, tag => ({
+                '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+            }[tag]));
+        }
+
+        // Modal Controls
+        function openApiModal() {
+            document.getElementById('apiKeyInput').value = sessionStorage.getItem('GEMINI_API_KEY') || '';
+            const modal = document.getElementById('apiModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeApiModal() {
+            const modal = document.getElementById('apiModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function saveApiKey() {
+            const key = document.getElementById('apiKeyInput').value.trim();
+            if (key) {
+                sessionStorage.setItem('GEMINI_API_KEY', key);
+            } else {
+                sessionStorage.removeItem('GEMINI_API_KEY');
+            }
+            updateModeIndicator();
+            closeApiModal();
+        }
+
+        function clearApiKey() {
+            sessionStorage.removeItem('GEMINI_API_KEY');
+            document.getElementById('apiKeyInput').value = '';
+            updateModeIndicator();
+            closeApiModal();
+        }
+
+        function updateModeIndicator() {
+            const hasKey = !!sessionStorage.getItem('GEMINI_API_KEY');
+            const dot = document.getElementById('modeDot');
+            const text = document.getElementById('modeText');
+            if (hasKey) {
+                dot.className = 'w-2 h-2 rounded-full bg-emerald-400';
+                text.textContent = 'Live Gemini API käytössä';
+            } else {
+                dot.className = 'w-2 h-2 rounded-full bg-amber-400 animate-pulse';
+                text.textContent = 'Simulaatiotila (Ilman API-avainta)';
+            }
+        }
+
+        function openPromptModal() {
+            const currentInput = document.getElementById('userInput').value.trim() || '[Asiakkaan alkuperäinen viesti kirjoitusvirheineen]';
+            document.getElementById('compiledPromptPreview').textContent = buildFullPrompt(currentInput);
+            const modal = document.getElementById('promptModal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closePromptModal() {
+            const modal = document.getElementById('promptModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function copyCompiledPrompt() {
+            const text = document.getElementById('compiledPromptPreview').textContent;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = text;
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempTextArea);
+
+            const confirmEl = document.getElementById('copyConfirm');
+            confirmEl.classList.remove('opacity-0');
+            setTimeout(() => confirmEl.classList.add('opacity-0'), 2000);
+        }
+    </script>
+</body>
+</html>
